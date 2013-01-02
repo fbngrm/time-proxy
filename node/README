@@ -1,1 +1,0 @@
-Node.js decorator/proxy for time measurement. Enables time measurement of every method of the given object. For the test use mocha [npm install -g mocha] and should [npm install -g should].
