@@ -1,43 +1,17 @@
 var winston = require('winston');
-var _logger = winston.loggers.get('winston');
+var _logger = winston.loggers.get('timing decorator');
   
 
  var TimingDecorator = function(target) {
 
     if(target == null || target === 0) throw new Error('target is null!');
     
-    var _target           = target;
-    var _this             = this; 
+    var _target = target;
+    var _this   = this; 
 
-    // members for test purposes
-    var _generatedMethods = [];
-    var _timerCalls       = {};
-    var _callbackCalls    = [];
-    var _hasCallbacks     = [];
 
-    // getter for test members
-    this.getHasCallbacks = function()
-    {
-        return _hasCallbacks;
-    }
-    this.getGeneratedMethods = function()
-    {
-        return _generatedMethods;
-    }
-    this.getTimerCalls = function()
-    {
-        return _timerCalls;
-    }
-    this.getCallbackCalls = function()
-    {
-        return _callbackCalls;
-    }
-
-    // add data to timerCalls for testing
-    var timerCall = function(methodName, method, timestamp)
-    {
-        _timerCalls[method] = _timerCalls[method] || {};
-        _timerCalls[method][methodName] = timestamp;
+    this.getThis = function() {
+        return _this;
     }
 
     // Timer object for time measurement
@@ -52,22 +26,17 @@ var _logger = winston.loggers.get('winston');
         {
             startTime = new Date().getTime();
             _logger.info('Start: ' + startTime);
-            // log this timer call for test purposes
-            timerCall('start', methodName, startTime);
         }
         this.stop = function()
         {
             stopTime = new Date().getTime();
             _logger.info('Stop: ' + stopTime);
-            // log this timer call for test purposes
-            timerCall('stop', methodName, stopTime);
         }
         this.getDelta = function()
         {
             delta = stopTime - startTime;
             _logger.info('Delta ' + delta + ' ms');
-            _logger.info('FUNCTION "' + name + '" TERMINATED AFTER: ' + delta + ' ms');
-            timerCall('delta', methodName, delta);
+            _logger.info('FUNCTION "' + name + '" TERMINATED AFTER: ' + delta + ' ms\n');
 
             return delta;
         }
@@ -80,6 +49,7 @@ var _logger = winston.loggers.get('winston');
     var generateMethod = function(methodName)
     {
         _this[methodName] = function () {
+
             var t = new timer(methodName);
             // get the last argument
             var len  = arguments.length;
@@ -90,17 +60,10 @@ var _logger = winston.loggers.get('winston');
                 // decorate the callback function
                 arguments[len-1] = callbackDecorator(t, last, methodName);
 
-                // log for test purposes
-                _generatedMethods.push(methodName);
-                _hasCallbacks.push(methodName);
-
                 _logger.info('Method "' + methodName + '" has a callback');
                 // return the decorated function
                 return methodDecorator(t, true, methodName, arguments);
             }
-            
-            // log for test purposes
-            _generatedMethods.push(methodName);
 
             _logger.info('Method: "' + methodName + '" has no callback');
             return methodDecorator(t, false, methodName, arguments);
@@ -139,18 +102,20 @@ var _logger = winston.loggers.get('winston');
         // return the decorated callback function
         return function()
         {
-            // call the callback function
             _logger.info('Called callback function of "' + methodName + '"');
-            callback();
 
-            // log for test pusrposes
-            _callbackCalls.push(methodName);
+            var args = Array.prototype.slice.call(arguments);
+            if(args != '') _logger.info('Callback has arguments: ' + args);
+
+            // call the callback function
+            var res = callback.apply(null, args);
 
             // stop the timer after the callback 
             _logger.info('Stop timer in method: "' + methodName + '"');
             timer.stop(); 
             // DEBUG
-            timer.getDelta();    
+            timer.getDelta();
+            return res;
         }
     };
 
@@ -159,13 +124,13 @@ var _logger = winston.loggers.get('winston');
      * Log the timestamp in time_t format(seconds since UNIX epoch)
      */
     var methodDecorator = function(timer, hasCallback, methodName, args)
-    { 
+    {
             // start the timer before calling the method
             _logger.info('Start timer in method "' + methodName + '"');
-            timer.start(); 
+            timer.start();
 
             // call the method 
-            _target[methodName].apply(_target, args);
+            var result = _target[methodName].apply(_target, args);
 
             // if the method doesn't have any callback function, stop 
             //the timer after calling the method
@@ -173,44 +138,13 @@ var _logger = winston.loggers.get('winston');
             {
                 timer.stop();
                 _logger.info('Stop timer in method "' + methodName + '"');
-                // DEBUG
                 timer.getDelta(); 
+                return result;
             }
     };
 
-    /**
-     * @param {Function} func the callback function
-     * @param {Object} opts an object literal with the following
-     * properties (all optional):
-     * scope: the object to bind the function to (what the "this" keyword will refer to)
-     * args: an array of arguments to pass to the function when it is called, these will be
-     * appended after any arguments passed by the caller
-     * suppressArgs: boolean, whether to supress the arguments passed
-     * by the caller. This default is false.
-     */
-    function callback(func, opts){  
-        var opts = opts ? opts : {};
-        var cb = function(){
-            var args = opts.args ? opts.args : [];
-            var scope = opts.scope ? opts.scope : this;
-            var fargs = opts.supressArgs === true ?
-                [] : toArray(arguments);
-            func.apply(scope,fargs.concat(args));
-        }
-        return cb;
-    }
-     
-    // Helper function for callback
-    function toArray(arrayLike){
-        var arr = [];
-        for(var i = 0; i < arrayLike.length; i++){
-            arr.push(arrayLike[i]);
-        }
-        return arr;
-    }
-
-    // geberate the proxy methods
+    // generate the proxy methods
     generateMethods();
 }
 
-module.exports.TimingDecorator = TimingDecorator;
+module.exports = TimingDecorator;
